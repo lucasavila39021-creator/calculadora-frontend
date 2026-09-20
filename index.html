@@ -28,6 +28,7 @@
       --serie-pot: #d55181;
       --serie-raiz: #008300;
       --serie-porc: #9085e9;
+      --serie-fact: #b8860b;
     }
 
     * { box-sizing: border-box; }
@@ -85,6 +86,8 @@
       gap: 1rem;
       margin-bottom: 1.5rem;
     }
+
+    .fila-operandos.unaria { grid-template-columns: 1fr; }
 
     /* fieldset + legend es la forma NATIVA de agrupar radios. Sin una sola
        linea de ARIA, el navegador ya anuncia "Operación, grupo, 1 de 4".
@@ -416,12 +419,12 @@
            Menos JavaScript escrito por nosotros = menos bugs nuestros. -->
       <form id="formulario">
 
-        <div class="fila-operandos">
+        <div class="fila-operandos" id="fila-operandos">
           <div>
             <label for="a">Primer valor</label>
             <input type="number" id="a" name="a" step="any" required placeholder="0" autofocus>
           </div>
-          <div>
+          <div id="grupo-b">
             <label for="b">Segundo valor</label>
             <input type="number" id="b" name="b" step="any" required placeholder="0">
           </div>
@@ -462,6 +465,11 @@
 
             <input type="radio" id="op-porc" name="operacion" value="porcentaje">
             <label for="op-porc"><span class="simbolo">%</span>Porcentaje</label>
+
+            <!-- Factorial es UNARIA, igual que raiz: la API solo usa "a" e
+                 ignora "b" (ver OPERACIONES en main.py). -->
+            <input type="radio" id="op-fact" name="operacion" value="factorial">
+            <label for="op-fact"><span class="simbolo">!</span>Factorial</label>
           </div>
         </fieldset>
 
@@ -566,6 +574,8 @@ const boton       = document.getElementById("boton");
 const botonLimpiar = document.getElementById("boton-limpiar");
 const campoA      = document.getElementById("a");
 const campoB      = document.getElementById("b");
+const filaOperandos = document.getElementById("fila-operandos");
+const grupoB      = document.getElementById("grupo-b");
 const panel       = document.getElementById("resultado");
 const expresionEl = document.getElementById("expresion");
 const valorEl     = document.getElementById("valor");
@@ -626,6 +636,38 @@ const TIMEOUT_MS = 10000;
 // estado del boton — dos Enter rapidos mandaban DOS pedidos.
 // Verificado: doble click = 1 pedido, doble Enter = 2 pedidos.
 let enviando = false;
+
+// Operaciones que solo necesitan UN numero. La API las procesa igual (recibe
+// a, b y operacion siempre), pero al usuario no tiene sentido pedirle un
+// "Segundo valor" que la API va a ignorar.
+const OPERACIONES_UNARIAS = new Set(["raiz", "factorial"]);
+
+/**
+ * Muestra u oculta el campo "Segundo valor" segun la operacion elegida.
+ *
+ * Cuando la operacion es unaria (hoy, solo raiz), el campo se oculta y deja
+ * de ser required, pero le ponemos "0" en vez de vaciarlo: el body del fetch
+ * siempre manda a, b y operacion (ver el comentario de CONFIGURACION mas
+ * arriba), asi que "b" tiene que seguir siendo un numero valido aunque la
+ * API no lo mire.
+ */
+function actualizarVisibilidadB() {
+  const operacionActual = formulario.operacion.value;
+  const esUnaria = OPERACIONES_UNARIAS.has(operacionActual);
+
+  grupoB.hidden = esUnaria;
+  filaOperandos.classList.toggle("unaria", esUnaria);
+  campoB.required = !esUnaria;
+  if (esUnaria) campoB.value = "0";
+}
+
+document.querySelectorAll('input[name="operacion"]').forEach((radio) => {
+  radio.addEventListener("change", actualizarVisibilidadB);
+});
+
+// Se corre una vez al cargar, por si el dia de mañana la operacion marcada
+// por defecto en el HTML pasara a ser una unaria.
+actualizarVisibilidadB();
 
 formulario.addEventListener("submit", async (evento) => {
   // Sin esto el navegador recarga la pagina entera y perdes todo. Es EL
@@ -771,6 +813,11 @@ botonLimpiar.addEventListener("click", () => {
   // aunque el input sea type="number". Por eso "0" entre comillas.
   campoA.value = "";
   campoB.value = "";
+
+  // Si la operacion elegida sigue siendo unaria (raiz), el campo oculto tiene
+  // que quedar en "0" y no en "" — un value vacio rompe el numero que se
+  // manda en el body del fetch.
+  actualizarVisibilidadB();
 
   // Escondemos el resultado viejo. Si no lo hicieras, quedaria en pantalla un
   // numero que ya no corresponde a lo que muestran los campos. El usuario ve
@@ -987,6 +1034,7 @@ const INFO_OPERACION = {
   potencia:       { etiqueta: "Potencia",       color: "var(--serie-pot)" },
   raiz:           { etiqueta: "Raíz",           color: "var(--serie-raiz)" },
   porcentaje:     { etiqueta: "Porcentaje",     color: "var(--serie-porc)" },
+  factorial:      { etiqueta: "Factorial",      color: "var(--serie-fact)" },
 };
 
 /**
